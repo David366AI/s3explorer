@@ -31,6 +31,7 @@ Keywords: AWS S3 browser, S3 explorer, S3 file editor, S3 bucket viewer, local S
 - [Why s3explorer](#why-s3explorer)
 - [Features](#features)
 - [Installation](#installation)
+- [Download Packages](#download-packages)
 - [Desktop Builds](#desktop-builds)
 - [Quick Start](#quick-start)
 - [Usage](#usage)
@@ -114,6 +115,22 @@ Supported image preview extensions include:
 
 ## Installation
 
+You can use `s3explorer` in two ways:
+
+### Option 1. Download a packaged release
+
+If you want to run `s3explorer` without setting up Python, download a prebuilt package from GitHub Releases:
+
+- Linux x64: [s3explorer-linux-x64-v1.0.0.tar.gz](https://github.com/David366AI/s3explorer/releases/download/v1.0.0/s3explorer-linux-x64-v1.0.0.tar.gz)
+- Windows x64: [s3explorer-windows-x64-v1.0.0.zip](https://github.com/David366AI/s3explorer/releases/download/v1.0.0/s3explorer-windows-x64-v1.0.0.zip)
+
+After downloading:
+
+- On Linux, extract the `tar.gz` file and run the `s3explorer` executable inside.
+- On Windows, extract the `zip` file and run `s3explorer.exe`.
+
+### Option 2. Run from source with Python
+
 ### Requirements
 
 - Python 3.10+
@@ -132,6 +149,15 @@ If you do not want a virtual environment, this also works:
 ```bash
 python -m pip install -r requirements.txt
 ```
+
+## Download Packages
+
+Direct download links for the current release:
+
+- Linux x64: [s3explorer-linux-x64-v1.0.0.tar.gz](https://github.com/David366AI/s3explorer/releases/download/v1.0.0/s3explorer-linux-x64-v1.0.0.tar.gz)
+- Windows x64: [s3explorer-windows-x64-v1.0.0.zip](https://github.com/David366AI/s3explorer/releases/download/v1.0.0/s3explorer-windows-x64-v1.0.0.zip)
+
+Source code and all release assets are also available on the GitHub Releases page.
 
 ## Desktop Builds
 
@@ -190,6 +216,15 @@ Important:
 - PyInstaller does not reliably produce Windows executables from Linux or macOS, or vice versa
 
 ## Quick Start
+
+There are two common ways to start using `s3explorer`:
+
+### Run the packaged app
+
+- Linux: extract the release package and run `./s3explorer`
+- Windows: extract the release package and run `s3explorer.exe`
+
+### Run with Python
 
 Start the local server:
 
