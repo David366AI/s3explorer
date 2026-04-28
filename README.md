@@ -224,6 +224,18 @@ There are two common ways to start using `s3explorer`:
 - Linux: extract the release package and run `./s3explorer`
 - Windows: extract the release package and run `s3explorer.exe`
 
+If port `8000` is already in use on your machine, start the packaged app with a different host or port:
+
+```bash
+./s3explorer --host 127.0.0.1 --port 9000
+```
+
+On Windows:
+
+```bat
+s3explorer.exe --host 127.0.0.1 --port 9000
+```
+
 ### Run with Python
 
 Start the local server:
@@ -249,6 +261,8 @@ You can also override the host and port:
 ```bash
 python server.py --host 127.0.0.1 --port 8001
 ```
+
+This is useful when port `8000` is already occupied by another local service.
 
 ## Usage
 
