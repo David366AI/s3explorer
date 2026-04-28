@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-import cgi
 import configparser
+import io
 import json
 import mimetypes
 import os
@@ -13,6 +13,8 @@ import time
 import traceback
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from email.parser import BytesParser
+from email.policy import default as email_policy
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -560,6 +562,26 @@ def history_path(bucket, key):
     return HISTORY_DIR / f"{stamp}_{safe}"
 
 
+def parse_multipart_files(headers, raw_body, field_name="files"):
+    content_type = headers.get("Content-Type", "")
+    if not content_type.startswith("multipart/form-data"):
+        raise AppError(HTTPStatus.BAD_REQUEST, "Expected multipart form upload")
+    message = BytesParser(policy=email_policy).parsebytes(
+        f"Content-Type: {content_type}\r\nMIME-Version: 1.0\r\n\r\n".encode("utf-8") + raw_body
+    )
+    files = []
+    for part in message.iter_parts():
+        if part.get_content_disposition() != "form-data":
+            continue
+        if part.get_param("name", header="content-disposition") != field_name:
+            continue
+        filename = part.get_filename()
+        if not filename:
+            continue
+        files.append((filename, part.get_payload(decode=True) or b""))
+    return files
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "s3explorer/0.1"
 
@@ -770,25 +792,15 @@ class Handler(BaseHTTPRequestHandler):
 
     def upload_files(self, account, bucket, query):
         prefix = clean_key(query.get("prefix", [""])[0]).rstrip("/")
-        form = cgi.FieldStorage(
-            fp=self.rfile,
-            headers=self.headers,
-            environ={
-                "REQUEST_METHOD": "POST",
-                "CONTENT_TYPE": self.headers.get("Content-Type", ""),
-                "CONTENT_LENGTH": self.headers.get("Content-Length", "0"),
-            },
-        )
-        files = form["files"] if "files" in form else []
-        files = files if isinstance(files, list) else [files]
+        length = int(self.headers.get("Content-Length", "0"))
+        raw_body = self.rfile.read(length)
+        files = parse_multipart_files(self.headers, raw_body)
         uploaded = []
-        for field in files:
-            if not field.filename:
-                continue
-            relative_name = clean_key(field.filename)
+        client = s3_client(account)
+        for filename, payload in files:
+            relative_name = clean_key(filename)
             key = f"{prefix}/{relative_name}".lstrip("/") if prefix else relative_name
-            client = s3_client(account)
-            s3_call(lambda: client.upload_fileobj(field.file, bucket, key))
+            s3_call(lambda payload=payload, key=key: client.upload_fileobj(io.BytesIO(payload), bucket, key))
             uploaded.append(key)
         return self.json_response({"ok": True, "uploaded": uploaded})
 
