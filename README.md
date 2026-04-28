@@ -31,6 +31,7 @@ Keywords: AWS S3 browser, S3 explorer, S3 file editor, S3 bucket viewer, local S
 - [Why s3explorer](#why-s3explorer)
 - [Features](#features)
 - [Installation](#installation)
+- [Desktop Builds](#desktop-builds)
 - [Quick Start](#quick-start)
 - [Usage](#usage)
 - [Permissions](#permissions)
@@ -132,12 +133,74 @@ If you do not want a virtual environment, this also works:
 python -m pip install -r requirements.txt
 ```
 
+## Desktop Builds
+
+To make `s3explorer` easy to run without a preinstalled Python environment, you can build platform-specific desktop bundles with PyInstaller.
+
+The repository includes helper scripts for all three desktop platforms:
+
+### Windows
+
+```bat
+build_windows.bat
+```
+
+### Linux
+
+```bash
+./build_linux.sh
+```
+
+### macOS
+
+```bash
+./build_macos.sh
+```
+
+All build scripts:
+
+- use an existing system-level `pyinstaller` installation
+- bundle the `static/` assets required by the web UI
+- create a distributable folder under `dist/s3explorer/`
+
+Build prerequisite:
+
+- install `pyinstaller` before running the build scripts
+- the scripts do not create or use a project virtual environment
+- on Linux, install it using your system package manager or another system-level method
+
+Platform notes:
+
+- Windows output includes `s3explorer.exe`
+- Linux output includes a native Linux executable named `s3explorer`
+- macOS output includes a native macOS executable named `s3explorer`
+
+Runtime behavior of the packaged app:
+
+- the app automatically opens the browser after launch
+- static files are loaded from the bundled application resources
+- user data is stored outside the install folder
+- on Windows, account data and history are stored under `%APPDATA%\s3explorer`
+- on Linux and macOS packaged builds, user data is stored under `$XDG_DATA_HOME/s3explorer` or `~/.local/share/s3explorer`
+
+Important:
+
+- build on the same target platform you plan to distribute to
+- use `build_windows.bat` on Windows, `build_linux.sh` on Linux, and `build_macos.sh` on macOS
+- PyInstaller does not reliably produce Windows executables from Linux or macOS, or vice versa
+
 ## Quick Start
 
 Start the local server:
 
 ```bash
 python server.py
+```
+
+By default, the app opens your browser automatically after startup. To disable that behavior:
+
+```bash
+python server.py --no-browser
 ```
 
 Open:
@@ -246,8 +309,8 @@ For production use, narrow permissions to the buckets and prefixes your team act
 
 The project keeps a small amount of local state:
 
-- `data/accounts.json`: saved account definitions
-- `data/history/`: timestamped backups of files before they are overwritten in S3
+- source checkout: `data/accounts.json` and `data/history/`
+- Windows packaged app: `%APPDATA%\s3explorer\accounts.json` and `%APPDATA%\s3explorer\history\`
 
 These files are intentionally local and are already ignored by `.gitignore`.
 
@@ -321,6 +384,17 @@ python server.py
 ```
 
 There is no frontend build step.
+
+To build distributables:
+
+```bat
+build_windows.bat
+```
+
+```bash
+./build_linux.sh
+./build_macos.sh
+```
 
 ## Contributing
 

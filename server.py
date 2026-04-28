@@ -8,11 +8,13 @@ import os
 import posixpath
 import re
 import shutil
+import sys
 import tempfile
 import threading
 import time
 import traceback
 import uuid
+import webbrowser
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from email.parser import BytesParser
 from email.policy import default as email_policy
@@ -29,11 +31,35 @@ except ImportError:
     BotoCoreError = ClientError = Exception
 
 
-ROOT = Path(__file__).resolve().parent
-DATA_DIR = ROOT / "data"
+def app_root():
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent
+
+
+def resource_root():
+    bundled_root = getattr(sys, "_MEIPASS", "")
+    if bundled_root:
+        return Path(bundled_root)
+    return Path(__file__).resolve().parent
+
+
+def user_data_dir():
+    if not getattr(sys, "frozen", False):
+        return app_root() / "data"
+    if os.name == "nt":
+        base = Path(os.environ.get("APPDATA") or app_root())
+        return base / "s3explorer"
+    base = Path(os.environ.get("XDG_DATA_HOME") or (Path.home() / ".local" / "share"))
+    return base / "s3explorer"
+
+
+APP_ROOT = app_root()
+RESOURCE_ROOT = resource_root()
+DATA_DIR = user_data_dir()
 ACCOUNTS_FILE = DATA_DIR / "accounts.json"
 HISTORY_DIR = DATA_DIR / "history"
-STATIC_DIR = ROOT / "static"
+STATIC_DIR = RESOURCE_ROOT / "static"
 DOWNLOAD_JOBS = {}
 DOWNLOAD_JOBS_LOCK = threading.Lock()
 TEXT_EXTENSIONS = {
@@ -563,6 +589,10 @@ def history_path(bucket, key):
     return HISTORY_DIR / f"{stamp}_{safe}"
 
 
+def history_label(target):
+    return str(target.relative_to(DATA_DIR))
+
+
 def parse_multipart_files(headers, raw_body, field_name="files"):
     content_type = headers.get("Content-Type", "")
     if not content_type.startswith("multipart/form-data"):
@@ -722,7 +752,7 @@ class Handler(BaseHTTPRequestHandler):
             target.write_text(content, encoding="utf-8")
             client = s3_client(account)
             s3_call(lambda: client.put_object(Bucket=bucket, Key=key, Body=content.encode("utf-8")))
-            return self.json_response({"ok": True, "history": str(target.relative_to(ROOT))})
+            return self.json_response({"ok": True, "history": history_label(target)})
 
         if segments == ["delete"] and method == "POST":
             payload = self.read_json()
@@ -890,16 +920,28 @@ def public_account(account):
     return public
 
 
+def open_browser_later(url):
+    timer = threading.Timer(0.8, lambda: webbrowser.open(url))
+    timer.daemon = True
+    timer.start()
+
+
 def main():
-    ensure_data()
     parser = argparse.ArgumentParser(description="Run the s3explorer local web server")
     parser.add_argument("--host", default="127.0.0.1", help="Host interface to bind to")
     parser.add_argument("--port", type=int, default=8000, help="Port to listen on")
+    parser.add_argument("--no-browser", action="store_true", help="Do not automatically open the app in a browser")
     args = parser.parse_args()
+    ensure_data()
     host = args.host
     port = args.port
     server = ThreadingHTTPServer((host, port), Handler)
-    print(f"s3explorer running at http://{host}:{port}")
+    url = f"http://{host}:{port}"
+    if not args.no_browser:
+        open_browser_later(url)
+    print(f"s3explorer running at {url}")
+    print(f"static assets: {STATIC_DIR}")
+    print(f"user data: {DATA_DIR}")
     server.serve_forever()
 
 
