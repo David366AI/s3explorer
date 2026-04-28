@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>s3explorer</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <aside class="sidebar">
+        <div class="brand">
+          <div>
+            <h1>s3explorer</h1>
+            <p>Local AWS S3 Explorer</p>
+          </div>
+          <button id="refreshAccounts" class="icon-button" title="Refresh accounts">↻</button>
+        </div>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Account</h2>
+            <div class="toolbar">
+              <button id="newAccountBtn" class="small-button">New</button>
+              <button id="editAccountBtn" class="small-button">Edit</button>
+              <button id="deleteSelectedAccountBtn" class="small-button danger-outline" disabled>Delete</button>
+            </div>
+          </div>
+          <select id="accountSelect">
+            <option value="">Select account</option>
+          </select>
+        </section>
+
+        <section class="panel bucket-panel">
+          <div class="panel-head">
+            <h2>Buckets</h2>
+            <div class="toolbar">
+              <button id="newBucketBtn" class="small-button">New</button>
+              <button id="deleteBucketBtn" class="small-button danger-outline" disabled>Delete</button>
+              <button id="refreshBuckets" class="icon-button" title="Refresh buckets">↻</button>
+            </div>
+          </div>
+          <div id="bucketList" class="bucket-list empty">Select an account.</div>
+        </section>
+      </aside>
+
+      <section class="workspace">
+        <header class="topbar">
+          <div>
+            <div class="eyebrow">Current bucket</div>
+            <h2 id="currentBucket">Select a bucket</h2>
+          </div>
+        </header>
+
+        <section id="dropZone" class="content-grid">
+          <aside class="tree-panel">
+            <div class="panel-head">
+              <h2>Object Tree</h2>
+              <div class="toolbar">
+                <button id="newFolderBtn" class="small-button">New Folder</button>
+                <button id="refreshTree" class="icon-button" title="Refresh object tree">↻</button>
+              </div>
+            </div>
+            <div id="tree" class="tree empty">Select a bucket to browse files.</div>
+          </aside>
+
+          <section class="viewer">
+            <div class="viewer-head">
+              <div>
+                <div class="eyebrow" id="selectedType">Nothing selected</div>
+                <h2 id="selectedName">Select a file or folder</h2>
+              </div>
+              <div class="toolbar">
+                <button id="downloadBtn" class="secondary-button" disabled>Download</button>
+                <button id="editBtn" class="secondary-button" disabled>Edit</button>
+                <button id="saveBtn" class="primary-button" hidden>Save</button>
+                <button id="deleteBtn" class="danger-button" disabled>Delete</button>
+              </div>
+            </div>
+            <div id="dropHint" class="drop-hint">Drop files or folders here to upload them to the selected folder.</div>
+            <div id="preview" class="preview">Preview and edit text files such as txt, xml, json, yaml, config, properties, sh, env, tpl, script, py, c, cpp, and java. Preview images such as png, jpg, jpeg, bmp, and gif.</div>
+            <div id="editorWrap" class="editor-wrap" hidden>
+              <pre id="editorHighlight" class="editor-highlight"></pre>
+              <textarea id="editor" class="editor" spellcheck="false"></textarea>
+            </div>
+          </section>
+        </section>
+      </section>
+    </main>
+
+    <dialog id="accountDialog" class="modal">
+      <form id="accountForm" class="account-form" method="dialog">
+        <div class="modal-head">
+          <h2 id="accountFormTitle">Account</h2>
+          <button id="closeAccountDialog" class="icon-button" type="button" title="Close">×</button>
+        </div>
+        <input id="accountName" placeholder="Profile name" autocomplete="off" />
+        <input id="keyId" placeholder="Key ID" autocomplete="off" />
+        <input id="accessKey" placeholder="Access key; leave blank to keep existing value" autocomplete="off" />
+        <input id="area" placeholder="Region" autocomplete="off" />
+        <select id="format">
+          <option value="json">json</option>
+          <option value="txt">txt</option>
+        </select>
+        <div class="modal-actions">
+          <button id="deleteAccountBtn" class="danger-text" type="button" hidden>Delete</button>
+          <span></span>
+          <button id="cancelAccountBtn" class="secondary-button" type="button">Cancel</button>
+          <button class="primary-button" type="submit">Save Account</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="deleteDialog" class="modal">
+      <form id="deleteForm" class="account-form" method="dialog">
+        <div class="modal-head">
+          <h2>Confirm Delete</h2>
+          <button id="closeDeleteDialog" class="icon-button" type="button" title="Close">×</button>
+        </div>
+        <p id="deleteMessage" class="modal-copy"></p>
+        <input id="deleteConfirmInput" placeholder="delete" autocomplete="off" />
+        <div class="modal-actions modal-actions-right">
+          <button id="cancelDeleteBtn" class="secondary-button" type="button">Cancel</button>
+          <button id="confirmDeleteBtn" class="danger-button" type="submit" disabled>Delete</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="uploadDialog" class="modal upload-modal">
+      <div class="modal-head">
+        <h2 id="uploadTitle">Uploading</h2>
+      </div>
+      <p id="uploadMessage" class="modal-copy"></p>
+      <div class="progress-track">
+        <div id="uploadProgressBar" class="progress-bar"></div>
+      </div>
+      <div id="uploadDetail" class="upload-detail"></div>
+      <div class="modal-actions modal-actions-right">
+        <button id="cancelTransferBtn" class="secondary-button" type="button">Cancel</button>
+      </div>
+    </dialog>
+
+    <dialog id="localDownloadDialog" class="modal">
+      <form id="localDownloadForm" class="account-form" method="dialog">
+        <div class="modal-head">
+          <h2>Download Locally</h2>
+          <button id="closeLocalDownloadDialog" class="icon-button" type="button" title="Close">×</button>
+        </div>
+        <p id="localDownloadMessage" class="modal-copy"></p>
+        <input id="localDownloadPath" placeholder="/home/dgong/Documents" autocomplete="off" />
+        <div class="modal-actions modal-actions-right">
+          <button id="cancelLocalDownloadBtn" class="secondary-button" type="button">Cancel</button>
+          <button class="primary-button" type="submit">Download</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div id="toast" class="toast" hidden></div>
+    <script src="/app.js"></script>
+  </body>
+</html>
