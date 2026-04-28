@@ -9,6 +9,10 @@ A local-first AWS S3 browser and editor for developers who need a fast way to in
 
 Unlike heavyweight cloud consoles or Electron desktop apps, `s3explorer` runs as a small Python server with a browser UI. It uses the Python standard library for the web layer and `boto3` for S3 operations.
 
+## Screenshot
+
+![s3explorer screenshot](s3explorer.jpg)
+
 Keywords: AWS S3 browser, S3 explorer, S3 file editor, S3 bucket viewer, local S3 admin tool, lightweight S3 GUI.
 
 ## Highlights
@@ -117,15 +121,15 @@ Supported image preview extensions include:
 ### Install dependencies
 
 ```bash
-python3 -m venv .venv
+python -m venv .venv
 source .venv/bin/activate
-python3 -m pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
 
 If you do not want a virtual environment, this also works:
 
 ```bash
-python3 -m pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
 
 ## Quick Start
@@ -133,7 +137,7 @@ python3 -m pip install -r requirements.txt
 Start the local server:
 
 ```bash
-python3 server.py
+python server.py
 ```
 
 Open:
@@ -145,7 +149,7 @@ http://127.0.0.1:8000
 You can also override the host and port:
 
 ```bash
-S3EXPLORER_HOST=127.0.0.1 S3EXPLORER_PORT=8001 python3 server.py
+S3EXPLORER_HOST=127.0.0.1 S3EXPLORER_PORT=8001 python server.py
 ```
 
 ## Usage
@@ -312,8 +316,8 @@ Not in its current form. The project is designed as a trusted local utility rath
 Install dependencies and run the server locally:
 
 ```bash
-python3 -m pip install -r requirements.txt
-python3 server.py
+python -m pip install -r requirements.txt
+python server.py
 ```
 
 There is no frontend build step.
