@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import argparse
 import configparser
 import io
 import json
@@ -891,8 +892,12 @@ def public_account(account):
 
 def main():
     ensure_data()
-    host = os.environ.get("S3EXPLORER_HOST", "127.0.0.1")
-    port = int(os.environ.get("S3EXPLORER_PORT", "8000"))
+    parser = argparse.ArgumentParser(description="Run the s3explorer local web server")
+    parser.add_argument("--host", default="127.0.0.1", help="Host interface to bind to")
+    parser.add_argument("--port", type=int, default=8000, help="Port to listen on")
+    args = parser.parse_args()
+    host = args.host
+    port = args.port
     server = ThreadingHTTPServer((host, port), Handler)
     print(f"s3explorer running at http://{host}:{port}")
     server.serve_forever()

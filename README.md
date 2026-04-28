@@ -149,7 +149,7 @@ http://127.0.0.1:8000
 You can also override the host and port:
 
 ```bash
-S3EXPLORER_HOST=127.0.0.1 S3EXPLORER_PORT=8001 python server.py
+python server.py --host 127.0.0.1 --port 8001
 ```
 
 ## Usage
