@@ -69,7 +69,7 @@ This project is a good fit for teams working with:
 
 ### AWS account management
 
-- Imports profiles from `$HOME/.aws/credentials` and `$HOME/.aws/config` on first start when `data/accounts.json` is missing or empty.
+- Imports profiles from `$HOME/.aws/credentials` and `$HOME/.aws/config` on first start when the local `accounts.json` file is missing or empty.
 - Create, edit, and delete local account entries.
 - Stores account name, access key ID, secret access key, region, and output format.
 - Masks secrets in the UI when listing saved accounts.
@@ -89,7 +89,7 @@ This project is a good fit for teams working with:
 - Previews common image formats directly in the browser.
 - Includes inline syntax highlighting for JSON, YAML, Python, C, C++, and Java.
 - Supports editing and saving back to S3 from the browser.
-- Writes a local timestamped backup to `data/history/` before upload.
+- Writes a local timestamped backup to the local history directory before upload.
 
 Supported text extensions include:
 
@@ -306,7 +306,7 @@ For supported text formats:
 3. Update the content.
 4. Click `Save`.
 
-Before the new content is uploaded to S3, a local snapshot is stored under `data/history/`.
+Before the new content is uploaded to S3, a local snapshot is stored in the local history directory.
 
 ### 5. Upload files or folders
 
@@ -362,15 +362,17 @@ For production use, narrow permissions to the buckets and prefixes your team act
 
 The project keeps a small amount of local state:
 
-- source checkout: `data/accounts.json` and `data/history/`
+- source checkout: `data/accounts.json` and `data/history/` under the project root, created automatically on first run if needed
 - Windows packaged app: `%APPDATA%\s3explorer\accounts.json` and `%APPDATA%\s3explorer\history\`
+
+The `data/` directory is runtime data. It may not be present in a fresh source archive or repository snapshot until the app has been started.
 
 These files are intentionally local and are already ignored by `.gitignore`.
 
 ## Security Notes
 
 - This is a local tool intended to run on a trusted machine.
-- AWS secrets are stored locally in `data/accounts.json` if you create or edit accounts in the UI.
+- AWS secrets are stored locally in the runtime `accounts.json` file if you create or edit accounts in the UI.
 - Local downloads are restricted to paths under your home directory or `/tmp`.
 - Destructive delete operations require explicit text confirmation.
 
@@ -386,9 +388,9 @@ If your workflow already uses `$HOME/.aws/credentials` and `$HOME/.aws/config`, 
 │   ├── index.html      # UI shell
 │   ├── app.js          # Client-side application logic
 │   └── styles.css      # Styles
-└── data/
-    ├── accounts.json   # Local account storage
-    └── history/        # Local edit history snapshots
+└── data/               # Runtime-generated local data directory (created on first run)
+	├── accounts.json   # Local account storage
+	└── history/        # Local edit history snapshots
 ```
 
 ## Use Cases
