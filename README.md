@@ -5,7 +5,9 @@
 ![boto3](https://img.shields.io/badge/boto3-powered-4B8BBE)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-A local-first AWS S3 browser and editor for developers who need a fast way to inspect buckets, browse objects as a tree, edit text files, and move files between S3 and their machine.
+Browse, preview, edit, and transfer S3 files across buckets and AWS accounts from one lightweight local UI.
+
+A local-first AWS S3 browser and editor for developers who need a fast way to inspect buckets, browse objects as a tree, edit text files, and move data across S3 buckets, AWS accounts, and local files without dropping back to the CLI.
 
 Unlike heavyweight cloud consoles or Electron desktop apps, `s3explorer` runs as a small Python server with a browser UI. It uses the Python standard library for the web layer and `boto3` for S3 operations.
 
@@ -23,8 +25,21 @@ Keywords: AWS S3 browser, S3 explorer, S3 file editor, S3 bucket viewer, local S
 - In-browser editing for common text and config files
 - Local history snapshots before overwrite
 - Drag-and-drop upload for files and folders
+- Cross-bucket and cross-account copy or move from a right-click menu
 - Safe delete confirmation for files and prefixes
 - Local download workflow with transfer progress and cancel support
+
+## Cross-Account Transfers, Without Context Switching
+
+One of the biggest pain points in day-to-day S3 operations is moving data between environments: staging to production, shared buckets to team buckets, or one AWS account to another. Most tools force you back to the AWS Console, the CLI, or a pile of temporary scripts.
+
+`s3explorer` keeps that workflow inside one lightweight UI. Right-click a file or folder, choose `Copy to` or `Move to`, pick another bucket or another configured AWS account, and track progress from the app.
+
+That makes `s3explorer` especially useful for:
+
+- promoting config or artifacts between staging and production
+- moving outputs between shared data accounts and application accounts
+- operational fixes where you need speed, visibility, and fewer manual steps
 
 ## Table of Contents
 
@@ -105,6 +120,11 @@ Supported image preview extensions include:
 - Create empty folders under the currently selected prefix.
 - Download individual files directly from the browser.
 - Download folders and large transfers through a local server-side job flow with progress tracking.
+- Right-click any file or folder to download, copy to, move to, or delete.
+- Copy and move objects between buckets in the same account.
+- Copy and move objects across different configured AWS accounts from the same UI.
+- Uses server-side S3 copy for same-account transfers when possible for a faster path.
+- Falls back to a local relay path for cross-account transfers when direct remote copy is not available.
 - Cancel uploads and downloads in progress.
 
 ### Drag-and-drop uploads
@@ -347,6 +367,27 @@ Drag files or directories from your desktop into the main workspace. If a folder
 - Folder downloads use the local server workflow and save to a directory on your machine.
 - Long-running downloads show progress and can be canceled.
 
+### 10. Copy or move files and folders across buckets or accounts
+
+This is one of the most powerful workflows in `s3explorer`: you can move data between buckets and even between different AWS accounts without leaving the browser UI.
+
+Use the custom right-click menu in the object tree to start transfer operations:
+
+1. Right-click a file or folder.
+2. Choose `Copy to` or `Move to`.
+3. Select the target account.
+4. Select the target bucket.
+5. Pick the target folder in the destination tree.
+6. Confirm the transfer.
+
+Notes:
+
+- Transfers work both within the same AWS account and across different configured accounts.
+- Same-account transfers prefer remote S3 copy on the server side.
+- Cross-account transfers fall back to a local relay through the running `s3explorer` server.
+- Progress is shown in the transfer dialog for long-running operations.
+- If source and destination resolve to the same location, the app blocks the request and shows an error before sending the copy.
+
 ## Permissions
 
 The exact AWS permissions depend on how you use the tool. For read-only browsing, listing and object reads are enough. For editing, uploading, deleting, and folder creation, write permissions are also required.
@@ -387,6 +428,8 @@ A minimal example policy for a specific bucket looks like this:
 
 For production use, narrow permissions to the buckets and prefixes your team actually needs.
 
+If you plan to use cross-account copy or move, make sure the source account can read the objects and the target account can write to the destination bucket. Cross-account move also requires permission to delete from the source after the copy completes.
+
 ## Data Storage
 
 The project keeps a small amount of local state:
@@ -426,6 +469,7 @@ If your workflow already uses `$HOME/.aws/credentials` and `$HOME/.aws/config`, 
 
 - Review and patch configuration files in S3 without using the AWS Console.
 - Compare and update environment-specific config in staging or production buckets.
+- Copy or move files between staging, production, and shared utility accounts from one UI.
 - Browse data pipeline artifacts and operational files more quickly than with CLI-only workflows.
 - Provide a lightweight internal S3 admin tool for engineers and operators.
 

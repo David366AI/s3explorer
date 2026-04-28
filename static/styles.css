@@ -279,6 +279,94 @@ textarea:focus {
   margin-left: 18px;
 }
 
+.dialog-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.selection-summary {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f8fafc;
+  color: var(--ink);
+  padding: 10px;
+  word-break: break-word;
+}
+
+.transfer-tree {
+  max-height: 280px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfdff;
+  padding: 8px;
+}
+
+.transfer-tree-node {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: center;
+  width: 100%;
+  min-height: 30px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  padding: 4px 6px;
+  text-align: left;
+}
+
+.transfer-tree-node:hover {
+  background: #f1f5f9;
+}
+
+.transfer-tree-node.active {
+  background: #dff0f5;
+  color: var(--accent-strong);
+}
+
+.transfer-tree-children {
+  margin-left: 18px;
+}
+
+.transfer-empty {
+  color: var(--muted);
+  padding: 12px 8px;
+}
+
+.context-menu {
+  position: fixed;
+  z-index: 1000;
+  display: grid;
+  min-width: 180px;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 12px 30px rgba(16, 24, 40, 0.18);
+  padding: 6px;
+}
+
+.context-menu[hidden] {
+  display: none;
+}
+
+.context-menu button {
+  width: 100%;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  padding: 9px 10px;
+  text-align: left;
+}
+
+.context-menu button:hover {
+  background: #eef5f8;
+}
+
 .show-more {
   min-height: 28px;
   margin: 4px 0 4px 24px;

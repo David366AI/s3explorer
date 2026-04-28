@@ -3,6 +3,7 @@ const state = {
   accountId: "",
   bucket: "",
   selected: null,
+  contextMenuNode: null,
   deleteTarget: null,
   editing: false,
   accountEditId: "",
@@ -13,6 +14,13 @@ const state = {
   currentJobId: "",
   jobPollTimer: null,
   defaultDocumentsPath: "",
+  transferAction: "copy",
+  transferTarget: null,
+  transferAccountId: "",
+  transferBucket: "",
+  transferPrefix: "",
+  transferTree: null,
+  transferRequestId: 0,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -60,6 +68,19 @@ const els = {
   localDownloadForm: $("localDownloadForm"),
   localDownloadMessage: $("localDownloadMessage"),
   localDownloadPath: $("localDownloadPath"),
+  transferDialog: $("transferDialog"),
+  transferForm: $("transferForm"),
+  transferDialogTitle: $("transferDialogTitle"),
+  transferSource: $("transferSource"),
+  targetAccountSelect: $("targetAccountSelect"),
+  targetBucketSelect: $("targetBucketSelect"),
+  transferTargetPath: $("transferTargetPath"),
+  transferTree: $("transferTree"),
+  confirmTransferBtn: $("confirmTransferBtn"),
+  errorDialog: $("errorDialog"),
+  errorDialogTitle: $("errorDialogTitle"),
+  errorDialogMessage: $("errorDialogMessage"),
+  contextMenu: $("contextMenu"),
   dropZone: $("dropZone"),
   toast: $("toast"),
 };
@@ -86,6 +107,20 @@ function toast(message, isError = false) {
   }, isError ? 6000 : 2600);
 }
 
+function showErrorDialog(message, title = "Operation Failed") {
+  els.errorDialogTitle.textContent = title;
+  els.errorDialogMessage.textContent = message || "Unknown error";
+  if (!els.errorDialog.open) {
+    els.errorDialog.showModal();
+  }
+}
+
+function closeErrorDialog() {
+  if (els.errorDialog.open) {
+    els.errorDialog.close();
+  }
+}
+
 async function loadAccounts() {
   await loadLocalDefaults();
   const data = await api("/api/accounts");
@@ -105,6 +140,26 @@ async function loadLocalDefaults() {
   if (state.defaultDocumentsPath) return;
   const data = await api("/api/local-defaults");
   state.defaultDocumentsPath = data.documents || "";
+}
+
+function hideContextMenu() {
+  state.contextMenuNode = null;
+  els.contextMenu.hidden = true;
+}
+
+function openContextMenu(node, x, y) {
+  if (!node?.key) return;
+  state.contextMenuNode = node;
+  els.contextMenu.hidden = false;
+  els.contextMenu.style.left = "0px";
+  els.contextMenu.style.top = "0px";
+  window.requestAnimationFrame(() => {
+    const rect = els.contextMenu.getBoundingClientRect();
+    const left = Math.max(8, Math.min(x, window.innerWidth - rect.width - 8));
+    const top = Math.max(8, Math.min(y, window.innerHeight - rect.height - 8));
+    els.contextMenu.style.left = `${left}px`;
+    els.contextMenu.style.top = `${top}px`;
+  });
 }
 
 function renderAccounts() {
@@ -130,6 +185,7 @@ function renderAccounts() {
 }
 
 async function selectAccount(accountId) {
+  hideContextMenu();
   if (!accountId) {
     clearAccountContext();
     renderAccounts();
@@ -146,6 +202,7 @@ async function selectAccount(accountId) {
 }
 
 function clearAccountContext() {
+  hideContextMenu();
   state.accountId = "";
   state.bucket = "";
   state.selected = null;
@@ -257,6 +314,7 @@ function renderBuckets(buckets) {
 }
 
 async function selectBucket(bucket) {
+  hideContextMenu();
   state.bucket = bucket;
   state.deleteTarget = null;
   [...els.bucketList.querySelectorAll(".bucket-item")].forEach((item) => {
@@ -267,6 +325,7 @@ async function selectBucket(bucket) {
 }
 
 async function loadTree() {
+  hideContextMenu();
   state.selected = null;
   resetViewer();
   if (!state.bucket) {
@@ -312,6 +371,7 @@ function renderNode(node, expanded = false) {
 
   row.addEventListener("click", async (event) => {
     event.stopPropagation();
+    hideContextMenu();
     selectNode(row, node);
     if (node.type === "folder") {
       if (!node.loaded) {
@@ -325,6 +385,17 @@ function renderNode(node, expanded = false) {
       els.preview.textContent = "This file type cannot be previewed directly.";
       state.currentContent = "";
     }
+  });
+
+  row.addEventListener("contextmenu", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!node.key) {
+      hideContextMenu();
+      return;
+    }
+    selectNode(row, node);
+    openContextMenu(node, event.clientX, event.clientY);
   });
 
   if (expanded && node.type === "folder") icon.textContent = "▾";
@@ -558,7 +629,7 @@ async function submitLocalDownload(event) {
     body: JSON.stringify({ key: state.selected.key, type: state.selected.type, destination }),
   });
   state.currentJobId = data.job.id;
-  updateLocalDownloadProgress(data.job);
+  updateJobProgress(data.job);
   pollDownloadJob();
 }
 
@@ -567,10 +638,15 @@ async function pollDownloadJob() {
   try {
     const data = await api(`/api/jobs/${encodeURIComponent(state.currentJobId)}`);
     const job = data.job;
-    updateLocalDownloadProgress(job);
+    updateJobProgress(job);
     if (job.status === "done") {
       finishTransferSoon(900);
-      toast(`Downloaded to ${job.targetPath}`);
+      if (job.jobKind === "transfer") {
+        await loadTree();
+        toast(`${transferActionLabel(job.action)} complete: ${job.targetPath}`);
+      } else {
+        toast(`Downloaded to ${job.targetPath}`);
+      }
       state.currentJobId = "";
       return;
     }
@@ -583,6 +659,11 @@ async function pollDownloadJob() {
     if (job.status === "error") {
       finishTransferSoon(500);
       toast(job.error || "Download failed", true);
+      if (job.jobKind === "transfer") {
+        window.setTimeout(() => {
+          showErrorDialog(job.error || "Transfer failed", `${transferActionLabel(job.action)} Failed`);
+        }, 520);
+      }
       state.currentJobId = "";
       return;
     }
@@ -592,7 +673,7 @@ async function pollDownloadJob() {
   }
 }
 
-function updateLocalDownloadProgress(job) {
+function updateJobProgress(job) {
   const percent = job.totalBytes ? Math.round((job.completedBytes / job.totalBytes) * 100) : 0;
   const filePart = job.totalFiles ? `${job.completedFiles} / ${job.totalFiles} files` : "Preparing files";
   const bytePart = job.totalBytes ? `${formatBytes(job.completedBytes)} / ${formatBytes(job.totalBytes)}` : "";
@@ -667,6 +748,282 @@ async function deleteSelected() {
   els.confirmDeleteBtn.disabled = true;
   els.deleteDialog.showModal();
   els.deleteConfirmInput.focus();
+}
+
+function transferActionLabel(action) {
+  return action === "move" ? "Move" : "Copy";
+}
+
+function formatTransferSource() {
+  const account = currentAccount();
+  const accountName = account?.name || state.accountId;
+  return `${accountName} / ${state.bucket} / ${state.transferTarget?.key || ""}`;
+}
+
+function updateTransferTargetPath() {
+  els.transferTargetPath.textContent = state.transferBucket
+    ? `${state.transferBucket}/${state.transferPrefix || ""}`
+    : "Select a bucket";
+}
+
+function updateTransferSubmitState() {
+  els.confirmTransferBtn.disabled = !(
+    state.transferTarget?.key
+    && state.transferAccountId
+    && state.transferBucket
+  );
+}
+
+function selectTransferPrefix(prefix, row) {
+  state.transferPrefix = prefix || "";
+  updateTransferTargetPath();
+  document.querySelectorAll(".transfer-tree-node.active").forEach((item) => item.classList.remove("active"));
+  row.classList.add("active");
+}
+
+function renderTransferAccounts() {
+  els.targetAccountSelect.innerHTML = "";
+  state.accounts.forEach((account) => {
+    const option = document.createElement("option");
+    option.value = account.id;
+    option.textContent = account.name;
+    els.targetAccountSelect.appendChild(option);
+  });
+  els.targetAccountSelect.value = state.transferAccountId;
+}
+
+async function openTransferDialog(action) {
+  if (!state.selected?.key) return;
+  hideContextMenu();
+  state.transferAction = action;
+  state.transferTarget = { ...state.selected };
+  state.transferAccountId = state.accountId;
+  state.transferBucket = state.bucket;
+  state.transferPrefix = "";
+  state.transferTree = null;
+  els.transferDialogTitle.textContent = `${transferActionLabel(action)} To`;
+  els.confirmTransferBtn.textContent = transferActionLabel(action);
+  els.transferSource.textContent = formatTransferSource();
+  renderTransferAccounts();
+  updateTransferTargetPath();
+  updateTransferSubmitState();
+  els.transferTree.innerHTML = '<div class="transfer-empty">Loading folders...</div>';
+  els.transferDialog.showModal();
+  await loadTransferBuckets();
+}
+
+function closeTransferDialog() {
+  state.transferTarget = null;
+  state.transferTree = null;
+  state.transferRequestId += 1;
+  els.transferDialog.close();
+}
+
+async function loadTransferBuckets() {
+  const requestId = ++state.transferRequestId;
+  updateTransferTargetPath();
+  updateTransferSubmitState();
+  if (!state.transferAccountId) {
+    els.targetBucketSelect.innerHTML = "";
+    els.transferTree.innerHTML = '<div class="transfer-empty">Select a target account.</div>';
+    updateTransferSubmitState();
+    return;
+  }
+  try {
+    const data = await api(`/api/s3/${encodeURIComponent(state.transferAccountId)}/buckets`);
+    if (requestId !== state.transferRequestId || !els.transferDialog.open) return;
+    const buckets = data.buckets || [];
+    els.targetBucketSelect.innerHTML = "";
+    if (!buckets.length) {
+      state.transferBucket = "";
+      updateTransferTargetPath();
+      els.transferTree.innerHTML = '<div class="transfer-empty">This account has no buckets.</div>';
+      updateTransferSubmitState();
+      return;
+    }
+    if (!buckets.includes(state.transferBucket)) {
+      state.transferBucket = buckets.includes(state.bucket) ? state.bucket : buckets[0];
+    }
+    buckets.forEach((bucket) => {
+      const option = document.createElement("option");
+      option.value = bucket;
+      option.textContent = bucket;
+      els.targetBucketSelect.appendChild(option);
+    });
+    els.targetBucketSelect.value = state.transferBucket;
+    updateTransferSubmitState();
+    await loadTransferTree();
+  } catch (error) {
+    if (requestId !== state.transferRequestId || !els.transferDialog.open) return;
+    els.transferTree.innerHTML = `<div class="transfer-empty">Failed to load buckets: ${escapeHtml(error.message)}</div>`;
+    updateTransferSubmitState();
+    throw error;
+  }
+}
+
+async function loadTransferTree() {
+  const requestId = ++state.transferRequestId;
+  state.transferPrefix = "";
+  updateTransferTargetPath();
+  updateTransferSubmitState();
+  if (!state.transferAccountId || !state.transferBucket) {
+    els.transferTree.innerHTML = '<div class="transfer-empty">Select a target bucket.</div>';
+    return;
+  }
+  els.transferTree.innerHTML = '<div class="transfer-empty">Loading folders...</div>';
+  try {
+    const data = await api(`/api/s3/${encodeURIComponent(state.transferAccountId)}/bucket/${encodeURIComponent(state.transferBucket)}/tree`);
+    if (requestId !== state.transferRequestId || !els.transferDialog.open) return;
+    state.transferTree = data.tree;
+    renderTransferTree();
+    updateTransferSubmitState();
+  } catch (error) {
+    if (requestId !== state.transferRequestId || !els.transferDialog.open) return;
+    els.transferTree.innerHTML = `<div class="transfer-empty">Failed to load folders: ${escapeHtml(error.message)}</div>`;
+    updateTransferSubmitState();
+    throw error;
+  }
+}
+
+function renderTransferTree() {
+  els.transferTree.innerHTML = "";
+  if (!state.transferBucket) {
+    els.transferTree.innerHTML = '<div class="transfer-empty">Select a target bucket.</div>';
+    return;
+  }
+  const rootButton = document.createElement("button");
+  rootButton.type = "button";
+  rootButton.className = `transfer-tree-node${state.transferPrefix === "" ? " active" : ""}`;
+  rootButton.innerHTML = '<span>▾</span><span class="tree-label">Bucket root</span>';
+  rootButton.addEventListener("click", () => selectTransferPrefix("", rootButton));
+  els.transferTree.appendChild(rootButton);
+
+  const children = document.createElement("div");
+  children.className = "transfer-tree-children";
+  els.transferTree.appendChild(children);
+  renderTransferTreeChildren(state.transferTree, children, true);
+}
+
+function renderTransferTreeChildren(node, container, isRoot = false) {
+  container.innerHTML = "";
+  const folders = (node?.children || []).filter((child) => child.type === "folder");
+  if (!folders.length && !node?.hasMore && isRoot) {
+    container.innerHTML = '<div class="transfer-empty">No subfolders found. You can still use the bucket root.</div>';
+    return;
+  }
+  folders.forEach((child) => container.appendChild(renderTransferTreeNode(child)));
+  if (node?.hasMore) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "show-more";
+    button.textContent = "Show more";
+    button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      button.disabled = true;
+      button.textContent = "Loading...";
+      await loadTransferTreeChildren(node, container, true);
+    });
+    container.appendChild(button);
+  }
+}
+
+function renderTransferTreeNode(node, expanded = false) {
+  const wrapper = document.createElement("div");
+  const row = document.createElement("button");
+  row.type = "button";
+  row.className = `transfer-tree-node${state.transferPrefix === node.key ? " active" : ""}`;
+  row.dataset.key = node.key;
+
+  const icon = document.createElement("span");
+  icon.textContent = expanded ? "▾" : "▸";
+  const label = document.createElement("span");
+  label.className = "tree-label";
+  label.textContent = node.name;
+  row.append(icon, label);
+  wrapper.appendChild(row);
+
+  const children = document.createElement("div");
+  children.className = "transfer-tree-children";
+  children.hidden = !expanded;
+  renderTransferTreeChildren(node, children);
+  wrapper.appendChild(children);
+
+  row.addEventListener("click", async () => {
+    selectTransferPrefix(node.key, row);
+    if (!node.loaded) {
+      await loadTransferTreeChildren(node, children);
+    }
+    children.hidden = !children.hidden;
+    icon.textContent = children.hidden ? "▸" : "▾";
+  });
+
+  return wrapper;
+}
+
+async function loadTransferTreeChildren(node, container, append = false) {
+  const token = append ? node.nextToken || "" : "";
+  const path = `/api/s3/${encodeURIComponent(state.transferAccountId)}/bucket/${encodeURIComponent(state.transferBucket)}/tree?prefix=${encodeURIComponent(node.key || "")}&token=${encodeURIComponent(token)}`;
+  const data = await api(path);
+  const incoming = data.tree;
+  node.loaded = true;
+  node.hasMore = incoming.hasMore;
+  node.nextToken = incoming.nextToken;
+  node.children = append ? [...(node.children || []), ...(incoming.children || [])] : incoming.children || [];
+  renderTransferTreeChildren(node, container);
+}
+
+async function submitTransfer(event) {
+  event.preventDefault();
+  if (!state.transferTarget?.key) return;
+  const transferTarget = { ...state.transferTarget };
+  const transferAction = state.transferAction;
+  const targetAccountId = state.transferAccountId;
+  const targetBucket = state.transferBucket;
+  const targetPrefix = state.transferPrefix;
+  els.confirmTransferBtn.disabled = true;
+  try {
+    closeTransferDialog();
+    showUploadProgress(`${transferActionLabel(transferAction)}ing ${transferTarget.type === "folder" ? "Folder" : "File"}`);
+    const data = await api(`/api/s3/${encodeURIComponent(state.accountId)}/bucket/${encodeURIComponent(state.bucket)}/transfer`, {
+      method: "POST",
+      signal: state.transferAbortController?.signal,
+      body: JSON.stringify({
+        key: transferTarget.key,
+        type: transferTarget.type,
+        action: transferAction,
+        targetAccountId,
+        targetBucket,
+        targetPrefix,
+      }),
+    });
+    state.currentJobId = data.job.id;
+    updateJobProgress(data.job);
+    pollDownloadJob();
+  } catch (error) {
+    finishTransferSoon(0);
+    showErrorDialog(error.message, `${transferActionLabel(transferAction)} Failed`);
+    throw error;
+  } finally {
+    if (els.transferDialog.open) {
+      updateTransferSubmitState();
+    }
+  }
+}
+
+async function runContextMenuAction(action) {
+  hideContextMenu();
+  if (!state.selected?.key) return;
+  if (action === "download") {
+    await downloadSelected();
+    return;
+  }
+  if (action === "delete") {
+    await deleteSelected();
+    return;
+  }
+  if (action === "copy" || action === "move") {
+    await openTransferDialog(action);
+  }
 }
 
 async function confirmDeleteSelected(event) {
@@ -942,6 +1299,7 @@ function handleTransferError(error) {
     return;
   }
   toast(error.message, true);
+  showErrorDialog(error.message, "Transfer Failed");
 }
 
 function updateUploadProgress(percent, message, detail) {
@@ -1061,6 +1419,18 @@ function escapeHtml(value) {
 }
 
 function bindEvents() {
+  document.addEventListener("contextmenu", (event) => {
+    event.preventDefault();
+    if (!event.target.closest(".tree-node")) {
+      hideContextMenu();
+    }
+  });
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest("#contextMenu")) {
+      hideContextMenu();
+    }
+  });
+  window.addEventListener("resize", hideContextMenu);
   $("refreshAccounts").addEventListener("click", () => loadAccounts().catch((error) => toast(error.message, true)));
   $("newAccountBtn").addEventListener("click", () => openAccountDialog(null));
   $("editAccountBtn").addEventListener("click", () => openAccountDialog(currentAccount()));
@@ -1075,6 +1445,23 @@ function bindEvents() {
   $("closeLocalDownloadDialog").addEventListener("click", closeLocalDownloadDialog);
   $("cancelLocalDownloadBtn").addEventListener("click", closeLocalDownloadDialog);
   els.localDownloadForm.addEventListener("submit", (event) => submitLocalDownload(event).catch((error) => toast(error.message, true)));
+  $("closeTransferDialog").addEventListener("click", closeTransferDialog);
+  $("cancelTransferDialogBtn").addEventListener("click", closeTransferDialog);
+  els.transferForm.addEventListener("submit", (event) => submitTransfer(event).catch(() => {}));
+  $("closeErrorDialog").addEventListener("click", closeErrorDialog);
+  $("confirmErrorDialogBtn").addEventListener("click", closeErrorDialog);
+  els.targetAccountSelect.addEventListener("change", () => {
+    state.transferAccountId = els.targetAccountSelect.value;
+    loadTransferBuckets().catch((error) => toast(error.message, true));
+  });
+  els.targetBucketSelect.addEventListener("change", () => {
+    state.transferBucket = els.targetBucketSelect.value;
+    loadTransferTree().catch((error) => toast(error.message, true));
+  });
+  $("contextDownloadBtn").addEventListener("click", () => runContextMenuAction("download").catch(handleTransferError));
+  $("contextMoveBtn").addEventListener("click", () => runContextMenuAction("move").catch((error) => toast(error.message, true)));
+  $("contextCopyBtn").addEventListener("click", () => runContextMenuAction("copy").catch((error) => toast(error.message, true)));
+  $("contextDeleteBtn").addEventListener("click", () => runContextMenuAction("delete").catch((error) => toast(error.message, true)));
   els.deleteConfirmInput.addEventListener("input", () => {
     els.confirmDeleteBtn.disabled = els.deleteConfirmInput.value !== "delete";
   });

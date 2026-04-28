@@ -26,9 +26,11 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 try:
     import boto3
     from botocore.exceptions import BotoCoreError, ClientError
+    from boto3.s3.transfer import TransferConfig
 except ImportError:
     boto3 = None
     BotoCoreError = ClientError = Exception
+    TransferConfig = None
 
 
 def app_root():
@@ -62,6 +64,16 @@ HISTORY_DIR = DATA_DIR / "history"
 STATIC_DIR = RESOURCE_ROOT / "static"
 DOWNLOAD_JOBS = {}
 DOWNLOAD_JOBS_LOCK = threading.Lock()
+S3_TRANSFER_CONFIG = (
+    TransferConfig(
+        multipart_threshold=64 * 1024 * 1024,
+        multipart_chunksize=64 * 1024 * 1024,
+        max_concurrency=8,
+        use_threads=True,
+    )
+    if TransferConfig
+    else None
+)
 TEXT_EXTENSIONS = {
     ".txt",
     ".xml",
@@ -327,6 +339,269 @@ def delete_prefix(client, bucket, prefix):
                 batch = []
     if batch:
         s3_call(lambda: client.delete_objects(Bucket=bucket, Delete={"Objects": batch}))
+
+
+def ensure_prefix(prefix):
+    prefix = clean_key(prefix or "")
+    if prefix and not prefix.endswith("/"):
+        prefix = f"{prefix}/"
+    return prefix
+
+
+def join_s3_key(prefix, name):
+    prefix = ensure_prefix(prefix)
+    name = str(name or "").lstrip("/")
+    return f"{prefix}{name}" if prefix else name
+
+
+def ensure_distinct_transfer(source_account_id, source_bucket, source_key, target_account_id, target_bucket, target_key):
+    if (
+        source_account_id == target_account_id
+        and source_bucket == target_bucket
+        and clean_key(source_key) == clean_key(target_key)
+    ):
+        raise AppError(HTTPStatus.BAD_REQUEST, "Source and destination are the same")
+
+
+def copy_error_message(exc, source_bucket, source_key, target_bucket, target_key, cross_account=False):
+    code = exc.response.get("Error", {}).get("Code") or ""
+    message = exc.response.get("Error", {}).get("Message") or str(exc)
+    if code in {"AccessDenied", "AllAccessDisabled"}:
+        if cross_account:
+            return (
+                "Cross-account server-side copy was denied. "
+                "The destination account credentials must be allowed to read "
+                f"s3://{source_bucket}/{source_key} and write s3://{target_bucket}/{target_key}. "
+                "For move, the source account credentials must also be allowed to delete the source object."
+            )
+        return (
+            "Server-side copy was denied. Check that the active credentials can read "
+            f"s3://{source_bucket}/{source_key} and write s3://{target_bucket}/{target_key}."
+        )
+    return message
+
+
+def upload_stream_between_clients(source_client, target_client, source_bucket, source_key, target_bucket, target_key, *, callback=None):
+    data = s3_call(lambda: source_client.get_object(Bucket=source_bucket, Key=source_key))
+    body = data["Body"]
+    extra_args = {}
+    content_type = data.get("ContentType")
+    if content_type:
+        extra_args["ContentType"] = content_type
+    metadata = data.get("Metadata") or {}
+    if metadata:
+        extra_args["Metadata"] = metadata
+    try:
+        upload_kwargs = {"ExtraArgs": extra_args or None}
+        if callback is not None:
+            upload_kwargs["Callback"] = callback
+        if S3_TRANSFER_CONFIG is not None:
+            upload_kwargs["Config"] = S3_TRANSFER_CONFIG
+        s3_call(lambda: target_client.upload_fileobj(body, target_bucket, target_key, **upload_kwargs))
+    finally:
+        body.close()
+
+
+def copy_object_between_clients(source_client, target_client, source_bucket, source_key, target_bucket, target_key, *, callback=None, cross_account=False):
+    copy_source = {"Bucket": source_bucket, "Key": source_key}
+    copy_kwargs = {"SourceClient": source_client}
+    if callback is not None:
+        copy_kwargs["Callback"] = callback
+    if S3_TRANSFER_CONFIG is not None:
+        copy_kwargs["Config"] = S3_TRANSFER_CONFIG
+    try:
+        return target_client.copy(copy_source, target_bucket, target_key, **copy_kwargs)
+    except ClientError as exc:
+        raise AppError(
+            HTTPStatus.BAD_GATEWAY,
+            copy_error_message(exc, source_bucket, source_key, target_bucket, target_key, cross_account=cross_account),
+        )
+    except BotoCoreError as exc:
+        raise AppError(HTTPStatus.BAD_GATEWAY, str(exc))
+
+
+def transfer_object(account, bucket, key, item_type, action, target_account_id, target_bucket, target_prefix):
+    if item_type not in {"file", "folder"}:
+        raise AppError(HTTPStatus.BAD_REQUEST, "Unsupported item type")
+    if action not in {"copy", "move"}:
+        raise AppError(HTTPStatus.BAD_REQUEST, "Unsupported transfer action")
+    if not target_bucket:
+        raise AppError(HTTPStatus.BAD_REQUEST, "Target bucket is required")
+    key = clean_key(key)
+    if not key:
+        raise AppError(HTTPStatus.BAD_REQUEST, "Source key is required")
+
+    target_account = account_by_id(target_account_id)
+    source_client = s3_client(account)
+    target_client = s3_client(target_account)
+    target_prefix = ensure_prefix(target_prefix)
+
+    if item_type == "file":
+        destination_key = join_s3_key(target_prefix, Path(key).name)
+        ensure_distinct_transfer(account["id"], bucket, key, target_account_id, target_bucket, destination_key)
+        transfer_file_between_clients(source_client, target_client, bucket, key, target_bucket, destination_key)
+        if action == "move":
+            s3_call(lambda: source_client.delete_object(Bucket=bucket, Key=key))
+        return {"count": 1, "destinationKey": destination_key}
+
+    source_prefix = ensure_prefix(key)
+    folder_name = Path(source_prefix.rstrip("/")).name
+    destination_prefix = join_s3_key(target_prefix, folder_name)
+    destination_prefix = ensure_prefix(destination_prefix)
+    ensure_distinct_transfer(account["id"], bucket, source_prefix, target_account_id, target_bucket, destination_prefix)
+
+    files = list_object_files_with_client(source_client, bucket, source_prefix)
+    if not files:
+        s3_call(lambda: target_client.put_object(Bucket=target_bucket, Key=destination_prefix, Body=b""))
+    for item in files:
+        source_key = item["key"]
+        relative = source_key[len(source_prefix):].lstrip("/")
+        destination_key = join_s3_key(destination_prefix, relative)
+        transfer_file_between_clients(source_client, target_client, bucket, source_key, target_bucket, destination_key)
+    if action == "move":
+        delete_prefix(source_client, bucket, source_prefix)
+    return {"count": len(files), "destinationKey": destination_prefix}
+
+
+def create_transfer_job(account, bucket, key, item_type, action, target_account_id, target_bucket, target_prefix):
+    job_id = uuid.uuid4().hex
+    job = {
+        "id": job_id,
+        "status": "queued",
+        "jobKind": "transfer",
+        "action": action,
+        "accountId": account.get("id", ""),
+        "bucket": bucket,
+        "key": key,
+        "type": item_type,
+        "targetAccountId": target_account_id,
+        "targetBucket": target_bucket,
+        "targetPrefix": ensure_prefix(target_prefix),
+        "targetPath": "",
+        "totalFiles": 0,
+        "completedFiles": 0,
+        "totalBytes": 0,
+        "completedBytes": 0,
+        "currentFile": "",
+        "error": "",
+        "cancel": threading.Event(),
+        "createdAt": time.time(),
+    }
+    with DOWNLOAD_JOBS_LOCK:
+        DOWNLOAD_JOBS[job_id] = job
+    thread = threading.Thread(target=run_transfer_job, args=(job_id, account.copy()), daemon=True)
+    thread.start()
+    return public_job(job)
+
+
+def transfer_file_between_clients(source_client, target_client, source_bucket, source_key, target_bucket, target_key):
+    copy_object_between_clients(source_client, target_client, source_bucket, source_key, target_bucket, target_key)
+
+
+def transfer_job_file(job_id, source_client, target_client, source_bucket, source_key, target_bucket, target_key, *, cross_account=False):
+    job = get_job(job_id)
+    if job["cancel"].is_set():
+        raise RuntimeError("Transfer canceled")
+    update_job(job_id, currentFile=source_key)
+    def callback(amount):
+        current = get_job(job_id)
+        if current["cancel"].is_set():
+            raise RuntimeError("Transfer canceled")
+        add_job_bytes(job_id, amount)
+
+    if cross_account:
+        upload_stream_between_clients(
+            source_client,
+            target_client,
+            source_bucket,
+            source_key,
+            target_bucket,
+            target_key,
+            callback=callback,
+        )
+    else:
+        copy_object_between_clients(
+            source_client,
+            target_client,
+            source_bucket,
+            source_key,
+            target_bucket,
+            target_key,
+            callback=callback,
+            cross_account=False,
+        )
+    complete_job_file(job_id, source_key)
+
+
+def run_transfer_job(job_id, account):
+    job = get_job(job_id)
+    target_account = account_by_id(job["targetAccountId"])
+    source_client = s3_client(account)
+    target_client = s3_client(target_account)
+    cross_account = account.get("id") != target_account.get("id")
+    try:
+        update_job(job_id, status="running")
+        if job["type"] == "folder":
+            run_folder_transfer_job(job_id, source_client, target_client, job["bucket"], job["key"], job["targetBucket"], job["targetPrefix"], job["action"], cross_account=cross_account)
+        else:
+            run_file_transfer_job(job_id, source_client, target_client, job["bucket"], job["key"], job["targetBucket"], job["targetPrefix"], job["action"], cross_account=cross_account)
+        current = get_job(job_id)
+        if current["cancel"].is_set():
+            update_job(job_id, status="canceled")
+        else:
+            update_job(job_id, status="done", currentFile="")
+    except Exception as exc:
+        current = get_job(job_id)
+        if current["cancel"].is_set():
+            update_job(job_id, status="canceled", error="")
+        else:
+            update_job(job_id, status="error", error=str(exc))
+
+
+def run_file_transfer_job(job_id, source_client, target_client, source_bucket, source_key, target_bucket, target_prefix, action, *, cross_account=False):
+    source_key = clean_key(source_key)
+    if not source_key or source_key.endswith("/"):
+        raise AppError(HTTPStatus.BAD_REQUEST, "A file key is required")
+    destination_key = join_s3_key(target_prefix, Path(source_key).name)
+    job = get_job(job_id)
+    ensure_distinct_transfer(job["accountId"], source_bucket, source_key, job["targetAccountId"], target_bucket, destination_key)
+    head = s3_call(lambda: source_client.head_object(Bucket=source_bucket, Key=source_key))
+    update_job(
+        job_id,
+        totalFiles=1,
+        totalBytes=head.get("ContentLength", 0),
+        targetPath=f"{target_bucket}/{destination_key}",
+        currentFile=source_key,
+    )
+    transfer_job_file(job_id, source_client, target_client, source_bucket, source_key, target_bucket, destination_key, cross_account=cross_account)
+    if action == "move":
+        s3_call(lambda: source_client.delete_object(Bucket=source_bucket, Key=source_key))
+
+
+def run_folder_transfer_job(job_id, source_client, target_client, source_bucket, source_prefix, target_bucket, target_prefix, action, *, cross_account=False):
+    source_prefix = ensure_prefix(source_prefix)
+    folder_name = Path(source_prefix.rstrip("/")).name or source_bucket
+    destination_prefix = ensure_prefix(join_s3_key(target_prefix, folder_name))
+    job = get_job(job_id)
+    ensure_distinct_transfer(job["accountId"], source_bucket, source_prefix, job["targetAccountId"], target_bucket, destination_prefix)
+    files = list_object_files_with_client(source_client, source_bucket, source_prefix)
+    update_job(
+        job_id,
+        totalFiles=len(files),
+        totalBytes=sum(item.get("size", 0) for item in files),
+        targetPath=f"{target_bucket}/{destination_prefix}",
+    )
+    if not files:
+        s3_call(lambda: target_client.put_object(Bucket=target_bucket, Key=destination_prefix, Body=b""))
+    for item in files:
+        if get_job(job_id)["cancel"].is_set():
+            raise RuntimeError("Transfer canceled")
+        source_key = item["key"]
+        relative = source_key[len(source_prefix):].lstrip("/")
+        destination_key = join_s3_key(destination_prefix, relative)
+        transfer_job_file(job_id, source_client, target_client, source_bucket, source_key, target_bucket, destination_key, cross_account=cross_account)
+    if action == "move":
+        delete_prefix(source_client, source_bucket, source_prefix)
 
 
 def delete_bucket_contents(client, bucket):
@@ -777,6 +1052,20 @@ class Handler(BaseHTTPRequestHandler):
             client = s3_client(account)
             s3_call(lambda: client.put_object(Bucket=bucket, Key=key, Body=b""))
             return self.json_response({"ok": True, "key": key})
+
+        if segments == ["transfer"] and method == "POST":
+            payload = self.read_json()
+            job = create_transfer_job(
+                account,
+                bucket,
+                payload.get("key", ""),
+                payload.get("type", ""),
+                payload.get("action", ""),
+                str(payload.get("targetAccountId") or "").strip(),
+                str(payload.get("targetBucket") or "").strip(),
+                payload.get("targetPrefix", ""),
+            )
+            return self.json_response({"ok": True, "job": job}, HTTPStatus.ACCEPTED)
 
         if segments == ["upload"] and method == "POST":
             return self.upload_files(account, bucket, query)

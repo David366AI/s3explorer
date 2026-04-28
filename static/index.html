@@ -155,6 +155,54 @@
       </form>
     </dialog>
 
+    <dialog id="transferDialog" class="modal">
+      <form id="transferForm" class="account-form" method="dialog">
+        <div class="modal-head">
+          <h2 id="transferDialogTitle">Copy To</h2>
+          <button id="closeTransferDialog" class="icon-button" type="button" title="Close">×</button>
+        </div>
+        <div>
+          <div class="eyebrow dialog-label">Source</div>
+          <div id="transferSource" class="selection-summary"></div>
+        </div>
+        <div>
+          <label class="dialog-label" for="targetAccountSelect">Target account</label>
+          <select id="targetAccountSelect"></select>
+        </div>
+        <div>
+          <label class="dialog-label" for="targetBucketSelect">Target bucket</label>
+          <select id="targetBucketSelect"></select>
+        </div>
+        <div>
+          <div class="dialog-label">Target directory</div>
+          <div id="transferTargetPath" class="selection-summary"></div>
+        </div>
+        <div id="transferTree" class="transfer-tree"></div>
+        <div class="modal-actions modal-actions-right">
+          <button id="cancelTransferDialogBtn" class="secondary-button" type="button">Cancel</button>
+          <button id="confirmTransferBtn" class="primary-button" type="submit">Copy</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="errorDialog" class="modal">
+      <div class="modal-head">
+        <h2 id="errorDialogTitle">Operation Failed</h2>
+        <button id="closeErrorDialog" class="icon-button" type="button" title="Close">×</button>
+      </div>
+      <p id="errorDialogMessage" class="modal-copy"></p>
+      <div class="modal-actions modal-actions-right">
+        <button id="confirmErrorDialogBtn" class="primary-button" type="button">OK</button>
+      </div>
+    </dialog>
+
+    <div id="contextMenu" class="context-menu" hidden>
+      <button id="contextDownloadBtn" type="button">Download</button>
+      <button id="contextMoveBtn" type="button">Move to</button>
+      <button id="contextCopyBtn" type="button">Copy to</button>
+      <button id="contextDeleteBtn" type="button">Delete</button>
+    </div>
+
     <div id="toast" class="toast" hidden></div>
     <script src="/app.js"></script>
   </body>
