@@ -286,7 +286,28 @@ If you want to add an account manually, use the account panel and provide:
 
 After choosing an account, the app loads all accessible buckets. Click a bucket to open its object tree.
 
-### 3. Browse and inspect objects
+### 3. Create a bucket
+
+Use the bucket toolbar to create a new bucket for the selected account:
+
+1. Click `New Bucket`.
+2. Enter a globally unique S3 bucket name.
+3. Confirm creation.
+
+If the bucket name already exists anywhere in AWS S3, creation will fail and the app will show the error.
+
+### 4. Delete a bucket
+
+To reduce accidental removal, bucket deletion requires an explicit confirmation:
+
+1. Select the bucket you want to remove.
+2. Click `Delete Bucket`.
+3. Type `delete` in the confirmation dialog.
+4. Confirm the deletion.
+
+The bucket must already be empty before S3 allows it to be deleted.
+
+### 5. Browse and inspect objects
 
 - Click folders to expand prefixes.
 - Click supported text files to preview their content.
@@ -297,7 +318,15 @@ Supported image preview formats:
 
 `png`, `jpg`, `jpeg`, `bmp`, `gif`
 
-### 4. Edit a text file
+### 6. Preview an image
+
+For supported image formats:
+
+1. Open a bucket and browse to an image file.
+2. Click the image object in the tree.
+3. View the image directly in the built-in preview panel.
+
+### 7. Edit a text file
 
 For supported text formats:
 
@@ -308,11 +337,11 @@ For supported text formats:
 
 Before the new content is uploaded to S3, a local snapshot is stored in the local history directory.
 
-### 5. Upload files or folders
+### 8. Upload files or folders
 
 Drag files or directories from your desktop into the main workspace. If a folder is selected, uploads go into that prefix. If a file is selected, uploads go into its parent folder.
 
-### 6. Download files or folders
+### 9. Download files or folders
 
 - File downloads can use the browser save dialog when supported.
 - Folder downloads use the local server workflow and save to a directory on your machine.
