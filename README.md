@@ -141,8 +141,8 @@ You can use `s3explorer` in two ways:
 
 If you want to run `s3explorer` without setting up Python, download a prebuilt package from GitHub Releases:
 
-- Linux x64: [s3explorer-linux-x64-v1.0.0.tar.gz](https://github.com/David366AI/s3explorer/releases/download/v1.0.0/s3explorer-linux-x64-v1.0.0.tar.gz)
-- Windows x64: [s3explorer-windows-x64-v1.0.0.zip](https://github.com/David366AI/s3explorer/releases/download/v1.0.0/s3explorer-windows-x64-v1.0.0.zip)
+- Linux x64: [s3explorer-linux-x64-v1.0.1.tar.gz](https://github.com/David366AI/s3explorer/releases/download/v1.0.1/s3explorer-linux-x64-v1.0.1.tar.gz)
+- Windows x64: [s3explorer-windows-x64-v1.0.1.zip](https://github.com/David366AI/s3explorer/releases/download/v1.0.1/s3explorer-windows-x64-v1.0.1.zip)
 
 After downloading:
 
@@ -176,8 +176,8 @@ python -m pip install -r requirements.txt
 
 Direct download links for the current release:
 
-- Linux x64: [s3explorer-linux-x64-v1.0.0.tar.gz](https://github.com/David366AI/s3explorer/releases/download/v1.0.0/s3explorer-linux-x64-v1.0.0.tar.gz)
-- Windows x64: [s3explorer-windows-x64-v1.0.0.zip](https://github.com/David366AI/s3explorer/releases/download/v1.0.0/s3explorer-windows-x64-v1.0.0.zip)
+- Linux x64: [s3explorer-linux-x64-v1.0.1.tar.gz](https://github.com/David366AI/s3explorer/releases/download/v1.0.1/s3explorer-linux-x64-v1.0.1.tar.gz)
+- Windows x64: [s3explorer-windows-x64-v1.0.1.zip](https://github.com/David366AI/s3explorer/releases/download/v1.0.1/s3explorer-windows-x64-v1.0.1.zip)
 
 Source code and all release assets are also available on the GitHub Releases page.
 
