@@ -126,8 +126,10 @@ If you want to run `s3explorer` without setting up Python, download a prebuilt p
 
 After downloading:
 
-- On Linux, extract the `tar.gz` file and run the `s3explorer` executable inside.
+- On Linux, extract the `tar.gz` file, enter the extracted `s3explorer/` directory, and run the `s3explorer` executable inside.
 - On Windows, extract the `zip` file and run `s3explorer.exe`.
+
+The Linux x64 package is built for `x86_64` or `amd64` systems. If your Linux machine is `arm64`, build and publish an `arm64` package on an `arm64` Linux machine.
 
 ### Option 2. Run from source with Python
 
@@ -188,6 +190,7 @@ All build scripts:
 - use an existing system-level `pyinstaller` installation
 - bundle the `static/` assets required by the web UI
 - create a distributable folder under `dist/s3explorer/`
+- generate a release archive for the target platform after the build finishes
 
 Build prerequisite:
 
@@ -197,8 +200,8 @@ Build prerequisite:
 
 Platform notes:
 
-- Windows output includes `s3explorer.exe`
-- Linux output includes a native Linux executable named `s3explorer`
+- Windows output includes `dist/s3explorer/` and a `dist/s3explorer-windows-<arch>.zip` archive
+- Linux output includes a native Linux executable named `s3explorer` and a `dist/s3explorer-linux-<arch>.tar.gz` archive
 - macOS output includes a native macOS executable named `s3explorer`
 
 Runtime behavior of the packaged app:
@@ -221,12 +224,13 @@ There are two common ways to start using `s3explorer`:
 
 ### Run the packaged app
 
-- Linux: extract the release package and run `./s3explorer`
+- Linux: extract the release package, enter the `s3explorer/` directory, and run `./s3explorer`
 - Windows: extract the release package and run `s3explorer.exe`
 
 If port `8000` is already in use on your machine, start the packaged app with a different host or port:
 
 ```bash
+cd s3explorer
 ./s3explorer --host 127.0.0.1 --port 9000
 ```
 
