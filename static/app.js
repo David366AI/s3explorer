@@ -23,6 +23,12 @@ const state = {
   transferRequestId: 0,
 };
 
+const MAX_TEXT_PREVIEW_BYTES = 2 * 1024 * 1024;
+
+function isTooLargeForText(node) {
+  return node && node.type === "file" && node.previewKind === "text" && (node.size || 0) > MAX_TEXT_PREVIEW_BYTES;
+}
+
 const $ = (id) => document.getElementById(id);
 
 const els = {
@@ -443,7 +449,7 @@ function selectNode(row, node) {
   els.selectedName.innerHTML = selectedTitleHtml(node);
   els.deleteBtn.disabled = !node.key;
   els.downloadBtn.disabled = !node.key;
-  els.editBtn.disabled = node.type !== "file" || node.previewKind !== "text";
+  els.editBtn.disabled = node.type !== "file" || node.previewKind !== "text" || isTooLargeForText(node);
 }
 
 function selectedTitleHtml(node) {
@@ -462,6 +468,12 @@ async function previewNode(node) {
 }
 
 async function viewFile(node) {
+  if (isTooLargeForText(node)) {
+    state.currentContent = "";
+    els.editor.value = "";
+    els.preview.textContent = `File is too large to preview or edit (${formatBytes(node.size || 0)}). The limit is ${formatBytes(MAX_TEXT_PREVIEW_BYTES)}. Please use Download instead.`;
+    return;
+  }
   els.preview.textContent = "Loading file...";
   try {
     const data = await api(`/api/s3/${encodeURIComponent(state.accountId)}/bucket/${encodeURIComponent(state.bucket)}/object?key=${encodeURIComponent(node.key)}`);

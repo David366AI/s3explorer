@@ -64,6 +64,7 @@ HISTORY_DIR = DATA_DIR / "history"
 STATIC_DIR = RESOURCE_ROOT / "static"
 DOWNLOAD_JOBS = {}
 DOWNLOAD_JOBS_LOCK = threading.Lock()
+MAX_TEXT_PREVIEW_BYTES = 2 * 1024 * 1024
 S3_TRANSFER_CONFIG = (
     TransferConfig(
         multipart_threshold=64 * 1024 * 1024,
@@ -1004,6 +1005,13 @@ class Handler(BaseHTTPRequestHandler):
                 raise AppError(HTTPStatus.BAD_REQUEST, "This file type is not previewable as text")
             client = s3_client(account)
             data = s3_call(lambda: client.get_object(Bucket=bucket, Key=key))
+            size = data.get("ContentLength", 0) or 0
+            if size > MAX_TEXT_PREVIEW_BYTES:
+                data["Body"].close()
+                raise AppError(
+                    HTTPStatus.BAD_REQUEST,
+                    f"File is too large to preview or edit ({size} bytes, limit {MAX_TEXT_PREVIEW_BYTES} bytes)",
+                )
             content = data["Body"].read().decode("utf-8", errors="replace")
             return self.json_response({"key": key, "content": content})
 
